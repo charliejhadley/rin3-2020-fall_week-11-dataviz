@@ -4,7 +4,6 @@ library(gt)
 
 dr_who_episodes <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-11-23/episodes.csv')
 
-
 most_popular_by_season <- dr_who_episodes %>% 
   select(season_number, episode_title, uk_viewers) %>% 
   mutate(uk_viewers = 1E6 * uk_viewers) %>% 

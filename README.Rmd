@@ -1,0 +1,218 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(tidyverse)
+library(gghighlight)
+library(ggtext)
+library(fivethirtyeight)
+library(gt)
+library(ggrepel)
+```
+
+# rin3-2020-fall_week-11-dataviz
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+This repository contains example data visualisations for Week 11's assignment in R in 3 Months.
+
+## Different types of chart
+
+In Week 11 David shows several different types of chart and how it's a good idea to experiment with alternative geoms.
+
+We've used geom_line() a few times to visualise time series:
+
+```{r}
+bechdel_pass_rate_over_time <- bechdel %>%
+  filter(year >= 1984) %>% 
+  select(year, binary) %>% 
+  count(year, binary) %>% 
+  group_by(year) %>% 
+  mutate(percent_n = n / sum(n))
+
+
+bechdel_pass_rate_over_time %>% 
+  ggplot(aes(x = year,
+             y = percent_n,
+             color = binary)) +
+  geom_line()
+
+```
+
+Alternatively, we could create a filled area chart with scale_area(). I've also used the {ggtext} package to give a more meaningful title to the chart:
+
+```{r}
+bechdel_pass_rate_over_time %>% 
+  ggplot(aes(x = year,
+             y = percent_n,
+             fill = binary)) +
+  geom_area(position = "stack") +
+  scale_fill_manual(values = c("FAIL" = "#A61C1B", "PASS" = "#6689F0")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "Over time the percentage of movies <span style='color:#6689F0'>passing the Bechdel test</span> is increasing",
+       y = "Percentage of movies released",
+       subtitle = "Data from fivethiryeight::bechdel") +
+  theme(plot.title = element_markdown())
+```
+
+With a little bit of fine tuning we can tidy up this chart even further:
+
+```{r}
+bechdel_pass_rate_over_time %>% 
+  ggplot(aes(x = year,
+             # ymax = percent_n,
+             # ymin = 0,
+             y = percent_n,
+             fill = binary)) +
+  geom_area(position = "stack") +
+  scale_fill_manual(values = c("FAIL" = "#A61C1B", "PASS" = "#6689F0")) +
+  scale_y_continuous(labels = scales::percent_format(),
+                     expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(title = "Over time the percentage of movies <span style='color:#6689F0'>passing the Bechdel test</span> is increasing",
+       y = "Percentage of movies released",
+       subtitle = "Data from fivethiryeight::bechdel") +
+  theme(plot.title = element_markdown())
+```
+
+
+
+## Tables
+
+David introduced the {gt} packages for creating good looking tables. Here's an example visualising the most popular episodes from the reboot of Dr. Who:
+
+```{r}
+dr_who_episodes <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-11-23/episodes.csv')
+
+most_popular_by_season <- dr_who_episodes %>% 
+  select(season_number, episode_title, uk_viewers) %>% 
+  mutate(uk_viewers = 1E6 * uk_viewers) %>% 
+  arrange(season_number) %>% 
+  drop_na() %>% 
+  group_by(season_number) %>% 
+  filter(uk_viewers == max(uk_viewers)) %>% 
+  ungroup() %>% 
+  mutate(growth = (uk_viewers - lag(uk_viewers)) / uk_viewers)
+
+most_popular_by_season %>% 
+  gt() %>% 
+  cols_label(season_number = "Season",
+             episode_title = "Episode Title",
+             uk_viewers = "UK Viewers (Millions)",
+             growth = "Growth (compared to previous season)") %>% 
+  fmt_number(columns = uk_viewers,
+             suffixing = TRUE) %>% 
+  fmt_percent(growth) %>% 
+  fmt_missing(columns = growth,
+              missing_text = "") %>% 
+  tab_style(
+    style = cell_text(color = "red"),
+    locations = cells_body(
+    columns = growth,
+    rows = growth < 0
+  ))
+```
+
+## Annotation
+
+Annotations can really help add story/explanations to your charts. In the line chart below I've used geom_vline() and annotate() to clearly identify the COVID-19 pandemic. I've also used {ggtext} to highlight an interesting feature of the data:
+
+```{r, out.width='800px'}
+busiest_us_airports <- read_csv("data/busiest-us-airports.csv")
+
+
+min_passengers <- min(busiest_us_airports$passengers)
+max_passengers <- max(busiest_us_airports$passengers)
+annotation_y_center <- min_passengers + (max_passengers - min_passengers) / 2         
+
+colors_airports <- c("Hartsfield-Jackson International Airport" = "#B0241F",
+                     "Dallas/Fort Worth International Airport" = "#7F8D3C",
+                     "Denver International Airport" = "#F97A1D",
+                     "O'Hare International Airport" = "#F1B43A",
+                     "Los Angeles International Airport" = "#DE7769")
+
+busiest_us_airports %>% 
+  ggplot(aes(x = year,
+             y = passengers,
+             color = airport)) +
+  geom_line(key_glyph = "timeseries") +
+  geom_vline(xintercept = 2020) +
+  annotate("text",
+           x = 2020 + 0.2,
+           y = annotation_y_center,
+           label = "2020 Coronavirus Pandemic",
+           angle = 90
+  ) +
+  scale_y_continuous(labels = scales::number_format(scale = 1E-6,
+                                                    suffix = " Million")) +
+  scale_color_manual(values = colors_airports,
+                     name = "") +
+  labs(y = "Total passengers",
+       title = "The COVID-19 pandemic has drastically affected passenger numbers amongst the top 5 busiest US airports.",
+       subtitle = "<span style='color:#7F8D3C'>Dallas Airport</span> is the only airport to have increased passenger in 2020,") +
+  theme_minimal() +
+  theme(plot.subtitle = element_markdown())
+```
+
+With a little bit more effort and the {ggrepel} package we can add labels to either end of the lines. Please note that I used ggsave() to fully control the dimensions of the chart and then it's been inserted into the RMarkdown output with knitr::include_graphics()
+
+```{r, out.width='800px'}
+gg_busiest_airport <- busiest_us_airports %>% 
+  ggplot(aes(x = year,
+             y = passengers,
+             color = airport)) +
+  geom_line(key_glyph = "timeseries") +
+  geom_vline(xintercept = 2020) +
+  geom_label_repel(aes(label = ifelse(year == 2009, scales::number(passengers, 
+                                                                   scale = 1E-6, 
+                                                                   suffix = "M",
+                                                                   accuracy = 1), "")),
+                   nudge_x = -0.5,
+                   segment.color = 'transparent',
+                   size = 2,
+                   show.legend = FALSE) +
+  geom_label_repel(aes(label = ifelse(year == 2020, scales::number(passengers, 
+                                                                   scale = 1E-6, 
+                                                                   suffix = "M",
+                                                                   accuracy = 1), "")),
+                   nudge_x = 0.1,
+                   segment.color = 'transparent',
+                   size = 3,
+                   show.legend = FALSE) +
+  annotate("text",
+           x = 2020 + 0.1,
+           y = 50E6,
+           label = "2020 Coronavirus Pandemic",
+           angle = 90,
+           size = 3
+           ) +
+  scale_y_continuous(labels = scales::number_format(scale = 1E-6,
+                                                    suffix = " Million")) +
+  scale_x_continuous(breaks = unique(busiest_us_airports$year)) +
+  scale_color_manual(values = colors_airports,
+                     labels = function(x) str_wrap(x, width = 20),
+                     name = "") +
+  labs(y = "Total passengers",
+       title = "The COVID-19 pandemic has drastically affected passenger numbers amongst the top 5 busiest US airports.",
+       subtitle = "<span style='color:#7F8D3C'>Dallas Airport</span> is the only airport to have increased passenger in 2020,") +
+  theme_minimal(base_size = 10) +
+  theme(plot.subtitle = element_markdown(),
+        legend.position = "bottom")
+
+ggsave("README_files/images/gg_busiest_airport.png",
+       gg_busiest_airport,
+       width = 10,
+       height = 5)
+
+knitr::include_graphics("README_files/images/gg_busiest_airport.png")
+```
+
+
